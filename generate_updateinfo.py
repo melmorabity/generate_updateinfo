@@ -20,6 +20,7 @@ import sys
 import os
 import errno
 import logging
+import yum
 
 from optparse import OptionParser
 parser = OptionParser(usage= "usage: [options] <path to errata.xml>")
@@ -175,7 +176,6 @@ def build_updateinfo(src):
         rel_fd[rel_num].write('<?xml version="1.0" encoding="UTF-8"?>\n')
         rel_fd[rel_num].write('<updates>\n')
             
-    pkg_parts = re.compile("(?P<name>.*)-(?P<version>.*)-(?P<release>.*)\.(?P<arch>.*).rpm")
     pkg_os_rel = re.compile(".*\.el(?P<os_rel>[0-9]*).*")
     for i in src._attrs.keys():
         # Sometimes it's a dict, sometimes it's a list, where we just take the first element.
@@ -216,16 +216,10 @@ def build_updateinfo(src):
             p_release = release
             packages = []
             for pkg in sec_dict.packages:
-                package = None
+                package = {'filename': pkg}
                 # Parse the package name
-                try:
-                    pkg_match = pkg_parts.match(pkg)
-                    package = pkg_match.groupdict()
-                    package.update({ 'filename': pkg })
-                    packages.append(package)
-                except Exception, err:
-                    logging.warning("Package name '%s' couldn't be matched against regex" % (pkg))
-                    continue
+                (package['name'], package['version'], package['release'], _, package['arch']) = yum.rpmUtils.miscutils.splitFilename(pkg)
+                packages.append(package)
                 # Extract the el release from here, otherwise it has no discernable release
                 if not p_release:
                     if ".el" in package['release']:
