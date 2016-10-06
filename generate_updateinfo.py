@@ -26,7 +26,7 @@ from optparse import OptionParser
 parser = OptionParser(usage= "usage: [options] <path to errata.xml>")
 
 parser.add_option("-r", "--release", dest="release", default=[],
-                  type=str, action='append', help="What releases would you like to track)")
+                  type=str, action='append', help="What releases would you like to track")
 
 parser.add_option("-f", "--from", dest="from_email", default="you@your_domain.com",
                   help="Email address of the maintainer")
