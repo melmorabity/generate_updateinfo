@@ -20,6 +20,7 @@ import sys
 import os
 import errno
 import logging
+import shutil
 import yum
 
 from optparse import OptionParser
@@ -159,7 +160,29 @@ def xml2obj(src):
         xml.sax.parse(src, builder)
     return builder.root._attrs.values()[0]
 
+def build_yum_cache(releases):
+    yb = yum.YumBase()
+    yb.setCacheDir(force=True, reuse=False)
+    yb.arch.archlist = ['ia32e', 'x86_64', 'athlon', 'i686', 'i586', 'i486', 'i386', 'noarch', 'src']
+    yb.repos.disableRepo('*')
+
+    supported_releases = {'5': ['i386', 'x86_64'], '6': ['i386', 'x86_64'], '7': ['x86_64']}
+    updates_mirrorlist = 'http://mirrorlist.centos.org/?release=%s&arch=%s&repo=updates'
+    updates_src_baseurl = 'http://vault.centos.org/centos/%s/updates/Source'
+    for rel in releases:
+        if rel not in supported_releases:
+            continue
+        yb.add_enable_repo('centos-updates-%s-source' % rel, baseurls=[updates_src_baseurl % rel])
+        for arch in supported_releases[rel]:
+            yb.add_enable_repo('centos-updates-%s-%s' % (rel, arch), mirrorlist=updates_mirrorlist % (rel, arch))
+
+    return yb
+
 def build_updateinfo(src):
+    # Build a private Yum cache with updates metadata for the specified releases
+    # currently supported by CentOS
+    yb = build_yum_cache(RELEASES)
+
     rel_fd = {}
     for rel_num in RELEASES:
         try:
@@ -219,6 +242,13 @@ def build_updateinfo(src):
                 package = {'filename': pkg}
                 # Parse the package name
                 (package['name'], package['version'], package['release'], _, package['arch']) = yum.rpmUtils.miscutils.splitFilename(pkg)
+                # Get the package epoch from Yum cache
+                pkg_yum = yb.pkgSack.searchNevra(name=package['name'], ver=package['version'], rel=package['release'], arch=package['arch'])
+                if len(pkg_yum) > 0:
+                    package['epoch'] = pkg_yum[0].epoch
+                else:
+                    # If the package is not in the updates metadata, use default epoch
+                    package['epoch'] = '0'
                 packages.append(package)
                 # Extract the el release from here, otherwise it has no discernable release
                 if not p_release:
@@ -248,7 +278,7 @@ def build_updateinfo(src):
             rel_fd[p_release].write("      <collection short=\"EL-%s\">\n" % p_release)
             rel_fd[p_release].write("        <name>CentOS %s</name>\n" % p_release)
             for pkg in packages:
-                rel_fd[p_release].write("        <package arch=\"%s\" epoch=\"%s\" name=\"%s\" release=\"%s\" src=\"%s\" version=\"%s\">\n" % (pkg['arch'], "0", pkg['name'], pkg['release'], "", pkg['version']))
+                rel_fd[p_release].write("        <package arch=\"%s\" epoch=\"%s\" name=\"%s\" release=\"%s\" src=\"%s\" version=\"%s\">\n" % (pkg['arch'], pkg['epoch'], pkg['name'], pkg['release'], "", pkg['version']))
                 rel_fd[p_release].write("          <filename>%(filename)s</filename>\n" % (pkg))
                 rel_fd[p_release].write("        </package>\n")
             rel_fd[p_release].write("      </collection>\n")
@@ -257,6 +287,9 @@ def build_updateinfo(src):
     for rel_num in RELEASES:
         rel_fd[rel_num].write("</updates>\n")
         rel_fd[rel_num].close()
+
+    # Clean private Yum metadata
+    shutil.rmtree(yb.conf.cachedir)
 
 if __name__ == "__main__":
     try:
