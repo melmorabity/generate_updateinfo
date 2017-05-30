@@ -62,6 +62,9 @@ parser.add_option("-t", "--type", dest="type", default=[],
 parser.add_option("-v", "--verbose", dest="verbose", default=False,
                   action='store_true', help="Add verbosity")
 
+parser.add_option("-l", "--log", dest="log_level", default="WARNING",
+                  help="Log Level")
+
 (options, args) = parser.parse_args()
 
 if len(options.severity) == 0:
@@ -79,6 +82,8 @@ options.release.append("other")
 if options.verbose:
     print "Parsed options:"
     print options
+
+logging.basicConfig(level = options.log_level.upper())
 
 ##### START CONFIGURATION HEADER #####
 # Sentry logging
