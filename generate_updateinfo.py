@@ -226,7 +226,7 @@ def build_yum_cache(releases):
     yb.arch.archlist = ['ia32e', 'x86_64', 'athlon', 'i686', 'i586', 'i486', 'i386', 'noarch', 'src']
     yb.repos.disableRepo('*')
 
-    supported_releases = {'5': ['i386', 'x86_64'], '6': ['i386', 'x86_64'], '7': ['x86_64']}
+    supported_releases = {'6': ['i386', 'x86_64'], '7': ['x86_64']}
     updates_mirrorlist = 'http://mirrorlist.centos.org/?release=%s&arch=%s&repo=updates'
     updates_src_baseurl = 'http://vault.centos.org/centos/%s/updates/Source'
     for rel in releases:
