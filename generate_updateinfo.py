@@ -221,20 +221,21 @@ def xml2obj(src):
     return builder.root._attrs.values()[0]
 
 def build_yum_cache(releases):
-    yb = yum.YumBase()
-    yb.setCacheDir(force=True, reuse=False)
-    yb.arch.archlist = ['ia32e', 'x86_64', 'athlon', 'i686', 'i586', 'i486', 'i386', 'noarch', 'src']
-    yb.repos.disableRepo('*')
-
+    yb = {}
     supported_releases = {'6': ['i386', 'x86_64'], '7': ['x86_64']}
     updates_mirrorlist = 'http://mirrorlist.centos.org/?release=%s&arch=%s&repo=updates'
     updates_src_baseurl = 'http://vault.centos.org/centos/%s/updates/Source'
     for rel in releases:
         if rel not in supported_releases:
             continue
-        yb.add_enable_repo('centos-updates-%s-source' % rel, baseurls=[updates_src_baseurl % rel])
+        yb[rel] = yum.YumBase()
+        yb[rel].setCacheDir(force=True, reuse=False)
+        yb[rel].arch.archlist = ['ia32e', 'x86_64', 'athlon', 'i686', 'i586', 'i486', 'i386', 'noarch', 'src']
+        yb[rel].repos.disableRepo('*')
+
+        yb[rel].add_enable_repo('centos-updates-%s-source' % rel, baseurls=[updates_src_baseurl % rel])
         for arch in supported_releases[rel]:
-            yb.add_enable_repo('centos-updates-%s-%s' % (rel, arch), mirrorlist=updates_mirrorlist % (rel, arch))
+            yb[rel].add_enable_repo('centos-updates-%s-%s' % (rel, arch), mirrorlist=updates_mirrorlist % (rel, arch))
 
     return yb
 
@@ -313,13 +314,16 @@ def build_updateinfo(src):
                 package = {'filename': pkg}
                 # Parse the package name
                 (package['name'], package['version'], package['release'], _, package['arch']) = yum.rpmUtils.miscutils.splitFilename(pkg)
-                # Get the package epoch from Yum cache
-                pkg_yum = yb.pkgSack.searchNevra(name=package['name'], ver=package['version'], rel=package['release'], arch=package['arch'])
-                if len(pkg_yum) > 0:
-                    package['epoch'] = pkg_yum[0].epoch
-                else:
-                    # If the package is not in the updates metadata, use default epoch
-                    package['epoch'] = '0'
+                # Default epoch
+                package['epoch'] = '0'
+                if release in yb:
+                    # Get epoch from Yum cache for the versioned packaged
+                    pkg_yum = yb[release].pkgSack.searchNevra(name=package['name'], ver=package['version'], rel=package['release'], arch=package['arch'])
+                    if len(pkg_yum) == 0:
+                        # Get greatest epoch from Yum cache from all package versions
+                        pkg_yum = yb[release].pkgSack.searchNevra(name=package['name'], arch=package['arch'])
+                    if len(pkg_yum) > 0:
+                        package['epoch'] = max([p['epoch'] for p in pkg_yum])
                 packages.append(package)
                 # Extract the el release from here, otherwise it has no discernable release
                 if not p_release:
@@ -370,7 +374,8 @@ def build_updateinfo(src):
         rel_fd[rel_num].close()
 
     # Clean private Yum metadata
-    shutil.rmtree(yb.conf.cachedir)
+    for y in yb:
+        shutil.rmtree(yb[y].conf.cachedir)
 
 if __name__ == "__main__":
     try:
